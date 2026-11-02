@@ -6,3 +6,4 @@
 ## SavedVariables: teamname, teamscore, tournamentMode
 ArenacraftSpectator.lua
 combatfeedback.lua
+replay.lua
