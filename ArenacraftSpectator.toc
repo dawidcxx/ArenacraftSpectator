@@ -1,0 +1,8 @@
+## Interface: 30300
+## Title: Arenacraft Spectator
+## Version: 27
+## Author: hvckfy
+## Notes: Arena spectator UI for Arenacraft
+## SavedVariables: teamname, teamscore, tournamentMode
+ArenacraftSpectator.lua
+combatfeedback.lua
