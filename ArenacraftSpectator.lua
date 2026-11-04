@@ -648,14 +648,14 @@ local function RealignFrames()
     end
 end
 
--- Change's spectators viewpoint to player with frame (frame)
-local function SetViewPoint(frame)
-    local target = GetPlayerByName(frame.text:GetText())
+-- Change's spectators viewpoint to the player called (name)
+local function WatchByName(name)
+    local target = GetPlayerByName(name)
     if target == false or target.name == "UNNAMED" then
         return
     end
     
-    SendChatMessage(".spect watch " .. frame.text:GetText(), "SAY");
+    SendChatMessage(".spect watch " .. name, "SAY");
 
     if (watch ~= nil) then
         ATPlayers[watch].fself.main:Hide()
@@ -674,6 +674,36 @@ local function SetViewPoint(frame)
                 ATPlayers[ATPlayers[watch].target].ftarget.main:Show()
             end
         end
+    end
+end
+
+-- Change's spectators viewpoint to player with frame (frame)
+local function SetViewPoint(frame)
+    WatchByName(frame.text:GetText())
+end
+
+-- Left click on a player in the world (your own target, not the target of whoever you watch): watch through their
+-- eyes, like clicking their frame. Live arenas bind sight; replays move the camera (server side, .spect watch).
+local lastReplayView = nil
+local function OnTargetChanged()
+    if not UnitExists("target") or not UnitIsPlayer("target") or UnitIsUnit("target", "player") then
+        return
+    end
+    local name = UnitName("target")
+    if not name then
+        return
+    end
+    local replaying = ArenacraftReplayBar and ArenacraftReplayBar:IsShown()
+    local p = GetPlayerByName(name)
+    if specingEnabled and p then
+        -- the server toggles off a second watch of the same player; clicking them again keeps the view
+        if p.guid ~= watch then
+            WatchByName(name)
+        end
+    elseif replaying and name ~= lastReplayView then
+        -- replays recorded without spectator data have no frames, the camera still moves
+        lastReplayView = name
+        SendChatMessage(".spect watch " .. name, "SAY")
     end
 end
 
@@ -2171,6 +2201,11 @@ end
 
 -- All incoming event handler and distributer
 local function EventHandler(self, event, arg1, arg2, arg3, arg4)
+    if (event == "PLAYER_TARGET_CHANGED") then
+        OnTargetChanged()
+        return
+    end
+
     if (event == "PLAYER_LOGIN") then
         SendChatMessage(".spect version " .. GetAddOnMetadata("ArenacraftSpectator", "Version") or "0", "SAY");
     end
@@ -2183,6 +2218,7 @@ local function EventHandler(self, event, arg1, arg2, arg3, arg4)
         if debugMode then
             print("ArenacraftSpectator: entering world, arena=" .. tostring(inArena) .. ", spectating=" .. tostring(specingEnabled))
         end
+        lastReplayView = nil
         if not inArena then
             Reset()
             toggle:Hide()
@@ -2619,6 +2655,7 @@ local function init()
     frame:RegisterEvent("CHAT_MSG_ADDON")
     frame:RegisterEvent("PLAYER_ENTERING_WORLD")
     frame:RegisterEvent("PLAYER_LOGIN")
+    frame:RegisterEvent("PLAYER_TARGET_CHANGED")
     frame:RegisterEvent("ADDON_LOADED")
     frame:SetScript("OnEvent", EventHandler)
     frame:SetScript("OnUpdate", CheckUIVisibility)
