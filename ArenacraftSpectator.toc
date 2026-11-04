@@ -4,6 +4,7 @@
 ## Author: hvckfy
 ## Notes: Arena spectator UI for Arenacraft
 ## SavedVariables: teamname, teamscore, tournamentMode
-ArenacraftSpectator.lua
+# combatfeedback.lua first: ArenacraftSpectator.lua calls clearCombatFeedback() while it loads
 combatfeedback.lua
+ArenacraftSpectator.lua
 replay.lua
