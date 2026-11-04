@@ -19,11 +19,12 @@ local function SendReplay(cmd)
     SendChatMessage(".replay " .. cmd, "SAY")
 end
 
--- Parented to WorldFrame so it stays visible while the spectator UI hides UIParent.
+-- Parented to WorldFrame so it stays visible while the spectator UI hides UIParent. At the top, under the arena
+-- timer: the bottom of the screen belongs to the spectator's big player frames and cast bars.
 local bar = CreateFrame("Frame", "ArenacraftReplayBar", WorldFrame)
 bar:SetWidth(WIDTH)
 bar:SetHeight(46)
-bar:SetPoint("BOTTOM", WorldFrame, "BOTTOM", 0, 120)
+bar:SetPoint("TOP", WorldFrame, "TOP", 0, -110)
 bar:SetFrameStrata("HIGH")
 bar:EnableMouse(true)
 bar:SetBackdrop({
