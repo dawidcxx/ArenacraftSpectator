@@ -526,6 +526,80 @@ local function GetPlayerByName(value)
     return false
 end
 
+-- GM aliases (.alias get returns "ALIAS:<character>=<alias>"). Show the alias
+-- but keep the real character name for unit lookups and server commands.
+local playerAliases = {}
+local aliasQueue = {}
+local aliasQueued = {}
+local aliasSupported = true
+
+local function GetDisplayName(p)
+    return playerAliases[p.name] or p.name
+end
+
+local function RefreshName(realName)
+    for _, p in pairs(ATPlayers) do
+        if p.name == realName then
+            local display = playerAliases[realName] or realName
+            for _, barname in pairs(ALLBARS) do
+                if p[barname] and p[barname].main and p[barname].main.text then
+                    p[barname].main.text:SetText(display)
+                end
+            end
+        end
+    end
+end
+
+local aliasSender = CreateFrame("Frame")
+aliasSender:Hide()
+aliasSender.elapsed = 0
+aliasSender:SetScript("OnUpdate", function(self, elapsed)
+    self.elapsed = self.elapsed + elapsed
+    if self.elapsed < 0.2 then return end
+    self.elapsed = 0
+    local name = table.remove(aliasQueue, 1)
+    if not name then
+        self:Hide()
+        return
+    end
+    SendChatMessage(".alias get " .. name, "SAY")
+end)
+
+local function RequestAlias(name)
+    if not aliasSupported or not name or name == "" or name == "UNNAMED" or playerAliases[name] or aliasQueued[name] then
+        return
+    end
+    aliasQueued[name] = true
+    table.insert(aliasQueue, name)
+    aliasSender:Show()
+end
+
+local function HandleAliasMessage(message)
+    if type(message) ~= "string" then return end
+
+    -- Spectators without the GM command get "Command 'alias get' does not
+    -- exist". Stop asking and just keep showing character names.
+    local lower = message:lower()
+    if aliasSupported and lower:find("alias get", 1, true) and
+        (lower:find("does not exist", 1, true) or lower:find("no such command", 1, true) or
+         lower:find("unknown command", 1, true) or lower:find("not have permission", 1, true) or
+         lower:find("access denied", 1, true)) then
+        aliasSupported = false
+        aliasQueue = {}
+        wipe(aliasQueued)
+        aliasSender:Hide()
+        return
+    end
+
+    local real, alias = message:match("ALIAS:([^=]+)=(.*)")
+    if not real then return end
+    real = real:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("^%s+", ""):gsub("%s+$", "")
+    alias = alias:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if real == "" or alias == "" then return end
+    playerAliases[real] = alias
+    RefreshName(real)
+end
+
 -- Realigns all small frames
 local function RealignFrames()
     local tableSize = GetTableSize(ATPlayers)
@@ -679,7 +753,10 @@ end
 
 -- Change's spectators viewpoint to player with frame (frame)
 local function SetViewPoint(frame)
-    WatchByName(frame.text:GetText())
+    local p = ATPlayers[frame.guid]
+    if p then
+        WatchByName(p.name)
+    end
 end
 
 -- Left click on a player in the world (your own target, not the target of whoever you watch): watch through their
@@ -1055,7 +1132,7 @@ local function CreateFrameForPlayer(p)
     f:SetFrameStrata("BACKGROUND")
     f.text = f:CreateFontString(nil, "OVERLAY")
     f.text:SetFont(STANDARD_TEXT_FONT, SIZE.SMALL.NAMETEXTSIZE, "OUTLINE")
-    f.text:SetText(p.name)
+    f.text:SetText(GetDisplayName(p))
     f:SetScript("OnClick", SetViewPoint)
     
     f.guid = p.guid
@@ -1208,7 +1285,7 @@ local function CreateFrameForPlayer(p)
     sf:SetFrameStrata("BACKGROUND")
     sf.text = sf:CreateFontString(nil, "OVERLAY")
     sf.text:SetFont(STANDARD_TEXT_FONT, SIZE.BIG.NAMETEXTSIZE, "OUTLINE")
-    sf.text:SetText(p.name)
+    sf.text:SetText(GetDisplayName(p))
 
     sf.guid = p.guid
     sf.CombatFeedbackText = sf:CreateFontString(nil, "OVERLAY")
@@ -1324,7 +1401,7 @@ local function CreateFrameForPlayer(p)
     tf:SetFrameStrata("BACKGROUND")
     tf.text = tf:CreateFontString(nil, "OVERLAY")
     tf.text:SetFont(STANDARD_TEXT_FONT, SIZE.BIG.NAMETEXTSIZE, "OUTLINE")
-    tf.text:SetText(p.name)
+    tf.text:SetText(GetDisplayName(p))
     tf:SetScript("OnClick", SetViewPoint)
 
     tf.guid = p.guid
@@ -1970,11 +2047,13 @@ end
 
 local function UpdateName(target, value)
     ATPlayers[target].name = value
+    local display = playerAliases[value] or value
 
     for _, barname in pairs(ALLBARS) do
-        local aaa = ATPlayers[target]
-        ATPlayers[target][barname].main.text:SetText(value)
+        ATPlayers[target][barname].main.text:SetText(display)
     end
+
+    RequestAlias(value)
 end
 
 local function UpdatePet(target, value)
@@ -2201,6 +2280,11 @@ end
 
 -- All incoming event handler and distributer
 local function EventHandler(self, event, arg1, arg2, arg3, arg4)
+    if (event == "CHAT_MSG_SYSTEM") or (event == "CHAT_MSG_SAY") or (event == "CHAT_MSG_WHISPER") then
+        HandleAliasMessage(arg1)
+        return
+    end
+
     if (event == "PLAYER_TARGET_CHANGED") then
         OnTargetChanged()
         return
@@ -2653,6 +2737,9 @@ local function init()
     -- Create event handling frame
     local frame = CreateFrame("Frame")
     frame:RegisterEvent("CHAT_MSG_ADDON")
+    frame:RegisterEvent("CHAT_MSG_SYSTEM")
+    frame:RegisterEvent("CHAT_MSG_SAY")
+    frame:RegisterEvent("CHAT_MSG_WHISPER")
     frame:RegisterEvent("PLAYER_ENTERING_WORLD")
     frame:RegisterEvent("PLAYER_LOGIN")
     frame:RegisterEvent("PLAYER_TARGET_CHANGED")
